@@ -37,6 +37,7 @@ const fetchAndSaveVideoDetails = async (
           publishedAt,
           thumbnailURL: item.snippet?.thumbnails?.default?.url,
           tags: item.snippet?.tags,
+          isLiveStream: item.snippet?.tags?.includes('stream'),
           stats: {
             viewCount: Number(item.statistics?.viewCount),
             commentCount: Number(item.statistics?.commentCount),
@@ -48,7 +49,7 @@ const fetchAndSaveVideoDetails = async (
         // Saving doc to firestore
         db.collection('videos')
           .doc(id!)
-          .set(doc)
+          .set(doc, { merge: true })
           .then(() => {
             console.log(`Successfully added Video: ${id} to the firestore 🎉`);
           })
@@ -67,18 +68,23 @@ const getSearchResults = async (
   await client.search
     .list({
       part: ['id'],
-      maxResults: 10,
+      maxResults: 50,
       order: 'date',
       type: ['video'],
       channelId: CHANNEL_ID,
       pageToken: nextPageToken,
-      publishedAfter: lastPublishedVideoDate?.toDate().toString(),
+      publishedAfter: lastPublishedVideoDate?.toDate().toISOString(),
     })
     .then(async (response) => {
       const videoIds: string[] = [];
       response.data.items?.forEach((item) => {
         if (item.id?.videoId) videoIds.push(item.id.videoId);
       });
+
+      if (!response.data.items?.length) {
+        console.info('No new vidoes Found! Exiting the function now...');
+        return;
+      }
 
       console.info('Fetching Video Details and saving it to firestore');
       fetchAndSaveVideoDetails(client, videoIds).catch(console.error);
